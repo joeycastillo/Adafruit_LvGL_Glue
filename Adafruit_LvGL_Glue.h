@@ -11,6 +11,16 @@
 #include <Ticker.h> // ESP32-specific timer lib
 #endif
 
+typedef union
+{
+    Adafruit_SPITFT *tft;
+    Adafruit_GFX *gfx;
+} GlueDisplay;
+
+typedef enum {
+  GLUE_DISPLAY_TFT,
+} GlueDisplayType;
+
 typedef enum {
   LVGL_OK,
   LVGL_ERR_ALLOC,
@@ -33,11 +43,12 @@ public:
   LvGLStatus begin(Adafruit_SPITFT *tft, bool debug = false);
   // These items need to be public for some internal callbacks,
   // but should be avoided by user code please!
-  Adafruit_SPITFT *display; ///< Pointer to the SPITFT display instance
-  void *touchscreen;        ///< Pointer to the touchscreen object to use
-  bool is_adc_touch; ///< determines if the touchscreen controlelr is ADC based
-  bool first_frame;  ///< Tracks if a call to `lv_flush_callback` needs to wait
-                     ///< for DMA transfer to complete
+  GlueDisplay display;          ///< Pointer to the SPITFT or EPD display instance
+  GlueDisplayType displayType;  ///< The type of display
+  void *touchscreen;            ///< Pointer to the touchscreen object to use
+  bool is_adc_touch;            ///< determines if the touchscreen controller is ADC based
+  bool first_frame;             ///< Tracks if a call to `lv_flush_callback` needs to wait
+                                ///< for DMA transfer to complete
 
 private:
   LvGLStatus begin(Adafruit_SPITFT *tft, void *touch, bool debug);

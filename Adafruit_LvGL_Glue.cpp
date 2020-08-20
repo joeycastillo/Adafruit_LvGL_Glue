@@ -63,7 +63,7 @@ static bool touchscreen_read(struct _lv_indev_drv_t *indev_drv,
 
   // Get pointer to glue object from indev user data
   Adafruit_LvGL_Glue *glue = (Adafruit_LvGL_Glue *)indev_drv->user_data;
-  Adafruit_SPITFT *disp = glue->display;
+  Adafruit_GFX *disp = glue->display.gfx;
 
   if (glue->is_adc_touch) {
     TouchScreen *touch = (TouchScreen *)glue->touchscreen;
@@ -83,7 +83,7 @@ static bool touchscreen_read(struct _lv_indev_drv_t *indev_drv,
     } else {
       release_count = 0;               // Reset release counter
       data->state = LV_INDEV_STATE_PR; // Is PRESSED
-      switch (glue->display->getRotation()) {
+      switch (disp->getRotation()) {
       case 0:
         last_x = map(p.x, ADC_XMIN, ADC_XMAX, 0, disp->width() - 1);
         last_y = map(p.y, ADC_YMAX, ADC_YMIN, 0, disp->height() - 1);
@@ -111,17 +111,19 @@ static bool touchscreen_read(struct _lv_indev_drv_t *indev_drv,
     Adafruit_STMPE610 *touch = (Adafruit_STMPE610 *)glue->touchscreen;
     // Before accessing SPI touchscreen, wait on any in-progress
     // DMA screen transfer to finish (shared bus).
-    disp->dmaWait();
-    disp->endWrite();
+    if (glue->displayType == GLUE_DISPLAY_TFT) {
+        glue->display.tft->dmaWait();
+        glue->display.tft->endWrite();
+    }
     if ((fifo = touch->bufferSize())) { // 1 or more points await
       data->state = LV_INDEV_STATE_PR;  // Is PRESSED
       TS_Point p = touch->getPoint();
       // Serial.printf("%d %d %d\r\n", p.x, p.y, p.z);
       // On big TFT FeatherWing, raw X axis is flipped??
-      if ((glue->display->width() == 480) || (glue->display->height() == 480)) {
+      if ((disp->width() == 480) || (disp->height() == 480)) {
         p.x = (TS_MINX + TS_MAXX) - p.x;
       }
-      switch (glue->display->getRotation()) {
+      switch (disp->getRotation()) {
       case 0:
         last_x = map(p.x, TS_MAXX, TS_MINX, 0, disp->width() - 1);
         last_y = map(p.y, TS_MINY, TS_MAXY, 0, disp->height() - 1);
@@ -180,11 +182,11 @@ static bool touchscreen_read(struct _lv_indev_drv_t *indev_drv,
 // This is the flush function required for LittlevGL screen updates.
 // It receives a bounding rect and an array of pixel data (conveniently
 // already in 565 format, so the Earth was lucky there).
-static void lv_flush_callback(lv_disp_drv_t *disp, const lv_area_t *area,
-                              lv_color_t *color_p) {
+static void lv_flush_callback_tft(lv_disp_drv_t *disp, const lv_area_t *area,
+                                  lv_color_t *color_p) {
   // Get pointer to glue object from indev user data
   Adafruit_LvGL_Glue *glue = (Adafruit_LvGL_Glue *)disp->user_data;
-  Adafruit_SPITFT *display = glue->display;
+  Adafruit_SPITFT *display = glue->display.tft;
 
   if (!glue->first_frame) {
     display->dmaWait();  // Wait for prior DMA transfer to complete
@@ -329,7 +331,8 @@ LvGLStatus Adafruit_LvGL_Glue::begin(Adafruit_SPITFT *tft, void *touch,
   LvGLStatus status = LVGL_ERR_ALLOC;
   if ((lv_pixel_buf = new lv_color_t[LV_HOR_RES_MAX * LV_BUFFER_ROWS * 2])) {
 
-    display = tft;
+    display.tft = tft;
+    displayType = GLUE_DISPLAY_TFT;
     touchscreen = (void *)touch;
 
     // Initialize LvGL display buffers
@@ -351,7 +354,9 @@ LvGLStatus Adafruit_LvGL_Glue::begin(Adafruit_SPITFT *tft, void *touch,
     lv_disp_drv.hor_res = tft->width();
     lv_disp_drv.ver_res = tft->height();
 #endif
-    lv_disp_drv.flush_cb = lv_flush_callback;
+    if (displayType == GLUE_DISPLAY_TFT) {
+        lv_disp_drv.flush_cb = lv_flush_callback_tft;
+    }
     lv_disp_drv.buffer = &lv_disp_buf;
     lv_disp_drv.user_data = (lv_disp_drv_user_data_t)this;
     lv_disp_drv_register(&lv_disp_drv);
